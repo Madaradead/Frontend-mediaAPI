@@ -1,6 +1,6 @@
 import apiClient from './apiClient';
-
-import {MediaItem} from "@/types/media.types";
+import { MediaItem } from '@/types/media.types';
+import axios from 'axios';
 
 export const mediaService = {
   getAllMedia: async (): Promise<MediaItem[]> => {
@@ -13,9 +13,6 @@ export const mediaService = {
     onProgress?: (progress: number) => void
   ): Promise<MediaItem> => {
     const response = await apiClient.post('/media/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total) {
           const percentCompleted = Math.round(
@@ -36,7 +33,14 @@ export const mediaService = {
       const response = await apiClient.get(`/media/${id}`);
       return response.data;
     } catch (error) {
-      console.warn('Searching for a media file...');
+      if (axios.isAxiosError(error)) {
+        if (error.response && error.response.status !== 404) {
+          throw error;
+        }
+      }else{
+        throw error;
+      }
+
       const allMediaResponse = await apiClient.get('/media');
       const allMedia = allMediaResponse.data.data || allMediaResponse.data;
 
@@ -49,6 +53,7 @@ export const mediaService = {
       return foundItem;
     }
   },
+
   updateMedia: async (
     id: string,
     data: { title?: string; description?: string; visibility?: string }
@@ -61,10 +66,16 @@ export const mediaService = {
     const response = await apiClient.delete(`/media/${id}`);
     return response.data;
   },
+
   searchMedia: async (query: string): Promise<MediaItem[]> => {
-    const response = await apiClient.get(`/media/search?q=${query}`);
+    const response = await apiClient.get(`/media/search`, {
+      params: {
+        q: query,
+      },
+    });
     return response.data.data || response.data;
   },
+
   getMyMedia: async (): Promise<MediaItem[]> => {
     const response = await apiClient.get('/media/my?status=ACTIVE');
     return response.data.data || response.data;

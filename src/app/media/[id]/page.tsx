@@ -2,60 +2,24 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Clock, User, Trash2, Edit2, Save, X } from 'lucide-react';
-import { useMediaDetails } from '@/hooks/useMedia';
+import {
+  ArrowLeft,
+  Clock,
+  User as UserIcon,
+  Trash2,
+  Edit2,
+  Save,
+  X,
+} from 'lucide-react';
+import { useMediaDetails, mediaKeys } from '@/hooks/useMedia';
 import { useQueryClient } from '@tanstack/react-query';
 import { mediaService } from '@/services/media.service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { VideoPlayer } from '@/components/ui/VideoPlayer';
-import { AudioPlayer } from '@/components/ui/AudioPlayer';
-import apiClient from '@/services/apiClient';
-
-const MediaThumbnail = ({
-  mediaId,
-  title,
-  type,
-}: {
-  mediaId: string;
-  title: string;
-  type: string;
-}) => {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (type === 'IMAGE' || type === 'image') {
-      apiClient
-        .get(`/media/${mediaId}/stream`, { responseType: 'blob' })
-        .then((res) => setBlobUrl(URL.createObjectURL(res.data)))
-        .catch(() => console.error('Could not load image'));
-    }
-  }, [mediaId, type]);
-
-  if ((type === 'IMAGE' || type === 'image') && blobUrl) {
-    return (
-      <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex items-center justify-center">
-        <img
-          src={blobUrl}
-          alt={title}
-          className="max-h-[60vh] w-auto object-contain rounded-xl"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-80 w-full bg-muted flex items-center justify-center rounded-3xl">
-      {type === 'VIDEO' || type === 'video' ? (
-        <VideoPlayer src={`http://localhost:5000/media/${mediaId}/stream`} />
-      ) : (
-        <AudioPlayer src={`http://localhost:5000/media/${mediaId}/stream`} />
-      )}
-    </div>
-  );
-};
+import { useAuthStore } from '@/store/auth.store';
+import { MediaThumbnail } from '@/components/ui/MediaThumbnail';
 
 export default function MediaDetailsPage() {
   const params = useParams();
@@ -70,28 +34,15 @@ export default function MediaDetailsPage() {
     description: '',
     visibility: 'PUBLIC',
   });
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+
+  const { user } = useAuthStore();
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    const authStorageStr = localStorage.getItem('auth-storage');
-
-    if (authStorageStr) {
-      try {
-        const authData = JSON.parse(authStorageStr);
-        const token = authData?.state?.token;
-
-        if (token) {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          setCurrentUserId(payload.userId || payload.id);
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          setCurrentUserRole(payload.role);
-        }
-      } catch (e) {
-        console.error('Token error', e);
-      }
-    }
+    const timeoutId = setTimeout(() => {
+      setIsMounted(true);
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, []);
 
   useEffect(() => {
@@ -105,14 +56,14 @@ export default function MediaDetailsPage() {
     }
   }, [media]);
 
-  const isOwner = currentUserId === media?.ownerId;
-  const canEditOrDelete = isOwner || currentUserRole === 'ADMIN';
+  const isOwner = isMounted && user?.id === media?.ownerId;
+  const canEditOrDelete = isMounted && (isOwner || user?.role === 'ADMIN');
 
   const handleDelete = async () => {
     if (confirm('Delete this file permanently?')) {
       try {
         await mediaService.deleteMedia(id);
-        void queryClient.invalidateQueries({ queryKey: ['mediaList'] });
+        void queryClient.invalidateQueries({ queryKey: mediaKeys.list });
         void router.push('/media');
       } catch (error) {
         console.error('Delete failed:', error);
@@ -125,7 +76,7 @@ export default function MediaDetailsPage() {
     try {
       await mediaService.updateMedia(id, editForm);
       setIsEditing(false);
-      void queryClient.invalidateQueries({ queryKey: ['media', id] });
+      void queryClient.invalidateQueries({ queryKey: mediaKeys.detail(id) });
     } catch (error) {
       console.error('Save failed:', error);
       alert('Error while saving');
@@ -169,6 +120,7 @@ export default function MediaDetailsPage() {
             mediaId={media.id}
             title={media.title}
             type={media.type}
+            variant="detail"
           />
 
           <div className="space-y-6">
@@ -227,7 +179,7 @@ export default function MediaDetailsPage() {
                   <span>{new Date(media.createdAt).toLocaleDateString()}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <User className="w-5 h-5 text-muted-foreground" />{' '}
+                  <UserIcon className="w-5 h-5 text-muted-foreground" />{' '}
                   <span>
                     Owner: {media.owner?.username || 'Unknown'}{' '}
                     {isOwner && '(You)'}

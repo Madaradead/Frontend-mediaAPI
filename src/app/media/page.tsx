@@ -1,19 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import {
-  Loader2,
-  AlertCircle,
-  FileVideo,
-  FileAudio,
-  Image as ImageIcon,
-} from 'lucide-react';
+import { mediaKeys } from '@/hooks/useMedia';
+import { Loader2, AlertCircle, FileVideo } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { MediaItem } from '@/types/media.types';
 import { useRouter } from 'next/navigation';
-import apiClient from '@/services/apiClient';
 import { mediaService } from '@/services/media.service';
 import {
   Card,
@@ -23,56 +17,7 @@ import {
   CardDescription,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-
-const getIconForType = (type: string) => {
-  switch (type?.toLowerCase()) {
-    case 'video':
-      return <FileVideo className="h-10 w-10 text-blue-500" />;
-    case 'audio':
-      return <FileAudio className="h-10 w-10 text-green-500" />;
-    default:
-      return <ImageIcon className="h-10 w-10 text-purple-500" />;
-  }
-};
-
-const MediaThumbnail = ({ media }: { media: MediaItem }) => {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (media.type === 'IMAGE' || media.type === 'image') {
-      apiClient
-        .get(`/media/${media.id}/stream`, { responseType: 'blob' })
-        .then((res) => {
-          setBlobUrl(URL.createObjectURL(res.data));
-        })
-        .catch(() => console.warn('Could not load image'));
-    }
-
-    return () => {
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-      }
-    };
-  }, [media.id, media.type]);
-
-  if ((media.type === 'IMAGE' || media.type === 'image') && blobUrl) {
-    return (
-      <div className="w-full h-32 mb-3 rounded-md overflow-hidden bg-slate-100 flex items-center justify-center">
-        <img
-          src={blobUrl}
-          alt={media.title}
-          className="w-full h-full object-cover"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-full h-32 mb-3 rounded-md bg-slate-50 flex items-center justify-center">
-      {getIconForType(media.type)}
-    </div>
-  );
-};
+import { MediaThumbnail } from '@/components/ui/MediaThumbnail';
 
 export default function MediaLibraryPage() {
   const router = useRouter();
@@ -81,8 +26,9 @@ export default function MediaLibraryPage() {
     data: mediaList = [],
     isLoading,
     error,
+    refetch,
   } = useQuery<MediaItem[], Error>({
-    queryKey: ['mediaList'],
+    queryKey: mediaKeys.list,
     queryFn: mediaService.getAllMedia,
   });
 
@@ -105,7 +51,7 @@ export default function MediaLibraryPage() {
         <AlertCircle className="h-12 w-12 text-destructive" />
         <h2 className="text-xl font-semibold">Oops! Something went wrong</h2>
         <p className="text-muted-foreground">{errorMessage}</p>
-        <Button onClick={() => window.location.reload()} variant="outline">
+        <Button onClick={() => refetch()} variant="outline">
           Try again
         </Button>
       </div>
@@ -140,7 +86,11 @@ export default function MediaLibraryPage() {
         {mediaList.map((media) => (
           <Link href={`/media/${media.id}`} key={media.id}>
             <Card className="hover:shadow-lg transition-shadow overflow-hidden group cursor-pointer h-full">
-              <MediaThumbnail media={media} />
+              <MediaThumbnail
+                mediaId={media.id}
+                title={media.title}
+                type={media.type}
+              />
               <CardHeader className="p-4 pb-2">
                 <div className="flex justify-between items-start">
                   <CardTitle className="text-lg truncate" title={media.title}>

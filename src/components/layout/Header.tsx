@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -9,17 +8,9 @@ import { PlayCircle } from 'lucide-react';
 
 export function Header() {
   const router = useRouter();
+  const { token, user, logout, isHydrated } = useAuthStore();
 
-  const { isAuthenticated, user, logout } = useAuthStore();
-
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setIsMounted(true);
-    }, 0);
-    return () => clearTimeout(timeoutId);
-  }, []);
+  const isAuthenticated = !!token;
 
   const handleLogout = () => {
     logout();
@@ -34,8 +25,8 @@ export function Header() {
       </Link>
 
       <div className="flex items-center gap-4">
-        {isMounted &&
-          (isAuthenticated ? (
+        {isHydrated ? (
+          isAuthenticated ? (
             <>
               <span className="text-sm font-medium text-muted-foreground hidden md:inline-block">
                 Hello, {user?.username}
@@ -53,7 +44,10 @@ export function Header() {
                 <Link href="/register">Sign up</Link>
               </Button>
             </>
-          ))}
+          )
+        ) : (
+          <div className="h-10 w-32 animate-pulse bg-muted rounded" />
+        )}
       </div>
     </header>
   );

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { mediaKeys } from '@/hooks/useMedia';
 import {
   UploadCloud,
   CheckCircle,
@@ -23,59 +24,74 @@ import {
 
 export default function MediaUploadPage() {
   const router = useRouter();
-
-
   const queryClient = useQueryClient();
-
+  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [validationError, setValidationError] = useState('');
 
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const uploadMutation = useMutation({
     mutationFn: (formData: FormData) => {
-
       return mediaService.uploadMedia(formData, (progress) => {
         setUploadProgress(progress);
       });
     },
     onSuccess: () => {
       setIsSuccess(true);
+      queryClient.invalidateQueries({ queryKey: mediaKeys.list });
+      queryClient.invalidateQueries({ queryKey: mediaKeys.mine });
 
-      queryClient.invalidateQueries({ queryKey: ['mediaList'] });
-
-
-      setTimeout(() => {
+      redirectTimeoutRef.current = setTimeout(() => {
         router.push('/media');
       }, 2000);
     },
     onError: () => {
-
       setUploadProgress(0);
     },
   });
 
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedFile) return;
+    setValidationError('');
 
+    const trimmedTitle = title.trim();
+
+    if (!trimmedTitle) {
+      setValidationError('Title cannot be empty.');
+      return;
+    }
+
+    if (!selectedFile) {
+      setValidationError('Please select a media file.');
+      return;
+    }
+
+    const MAX_FILE_SIZE = 50 * 1024 * 1024;
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      setValidationError('File size exceeds the 50MB limit.');
+      return;
+    }
 
     const formData = new FormData();
-    formData.append('title', title);
-    formData.append('description', description);
+    formData.append('title', trimmedTitle);
+    formData.append('description', description.trim());
     formData.append('file', selectedFile);
-
-
 
     uploadMutation.mutate(formData);
   };
-
 
   if (isSuccess) {
     return (
@@ -116,10 +132,12 @@ export default function MediaUploadPage() {
               <input
                 id="title"
                 type="text"
-                required
                 disabled={uploadMutation.isPending}
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  setValidationError('');
+                }}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="E.g., Vacation Video 2026"
               />
@@ -141,14 +159,21 @@ export default function MediaUploadPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Media File</label>
+              {/* Тут ми додали htmlFor */}
+              <label htmlFor="media-file" className="text-sm font-medium">
+                Media File
+              </label>
               <div className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center bg-muted/20 hover:bg-muted/40 transition-colors">
                 <UploadCloud className="w-10 h-10 text-muted-foreground mb-4" />
+                {/* А тут додали id */}
                 <input
+                  id="media-file"
                   type="file"
-                  required
                   disabled={uploadMutation.isPending}
-                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    setSelectedFile(e.target.files?.[0] || null);
+                    setValidationError('');
+                  }}
                   className="text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
                 />
                 {selectedFile && (
@@ -160,6 +185,13 @@ export default function MediaUploadPage() {
                 )}
               </div>
             </div>
+
+            {validationError && (
+              <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 shrink-0" />
+                <span>{validationError}</span>
+              </div>
+            )}
 
             {uploadMutation.isError && (
               <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-start gap-2">
@@ -191,7 +223,7 @@ export default function MediaUploadPage() {
             <Button
               type="submit"
               className="w-full"
-              disabled={!selectedFile || uploadMutation.isPending}
+              disabled={uploadMutation.isPending}
             >
               {uploadMutation.isPending ? 'Uploading...' : 'Upload File'}
             </Button>
